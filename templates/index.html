@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Labor Law Chatbot</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        html, body {
+            height: 100%; /* 전체 화면 높이 사용 */
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            min-height: 90vh; /* 화면 높이를 꽉 채움 */
+        }
+        .chat-box {
+            flex: 1; /* 높이를 유동적으로 설정하여 화면 채우기 */
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            padding: 20px;
+            background-color: #fff;
+            /*min-height: 300px;*/
+            /*max-height: 500px;*/
+            overflow-y: auto;
+            margin-bottom: 20px;
+        }
+        .input-area {
+            display: flex;
+        }
+        .input-area input {
+            flex: 1;
+            padding: 15px;
+            font-size: 18px;
+            border-radius: 10px;
+            border: 1px solid #ccc;
+        }
+        .input-area button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            border: none;
+            color: white;
+            border-radius: 10px;
+            margin-left: 10px;
+            cursor: pointer;
+            font-size: 20px;
+        }
+        .input-area button:hover {
+            background-color: #0056b3;
+        }
+        .message {
+            margin-bottom: 10px;
+        }
+        .message .user {
+            font-weight: bold;
+            color: #007bff;
+        }
+        .message .ai {
+            font-weight: bold;
+            color: #28a745;
+        }
+        .message p {
+            white-space: pre-wrap; /* 줄바꿈 처리 */
+        }
+        .loading {
+            color: grey;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>AI Labor Law Chatbot</h1>
+    <div class="chat-box" id="chat-box">
+        <!-- Chat messages will be displayed here -->
+    </div>
+    <div class="input-area">
+        <input type="text" id="user-input" placeholder="AI노무사에게 상담받기" onkeydown="checkEnter(event)"/>
+        <button onclick="sendMessage()">
+            <i class="fas fa-arrow-up"></i> <!-- Font Awesome 윗방향 화살표 아이콘 -->
+        </button>
+    </div>
+    <div class="loading" id="loading" style="display:none;">답변을 생성하는 중...</div>
+</div>
+
+<script>
+    const chatBox = document.getElementById("chat-box");
+    const loading = document.getElementById("loading");
+
+    // 엔터 키를 감지하여 제출
+    function checkEnter(event) {
+        if (event.key === "Enter") {
+            sendMessage();
+        }
+    }
+
+    function sendMessage() {
+        const userInput = document.getElementById("user-input");
+        const query = userInput.value.trim();
+        if (!query) return;
+
+        // 사용자 질문을 채팅창에 표시
+        addMessage("user", query);
+
+        // 입력 필드 초기화
+        userInput.value = "";
+        loading.style.display = "block";
+
+        // 서버에 질문 전송
+        fetch("/ask", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ query: query, history: [] }),
+        })
+            .then(response => response.json())
+            .then(data => {
+                loading.style.display = "none";
+                // 서버로부터 답변과 참조 문서를 받아서 출력
+                addMessage("ai", formatText(data.answer));  // 포맷팅된 텍스트 추가
+                if (data.references.length > 0) {
+                    let references = "<br/><strong>[참고 문서] :</strong>";
+                    data.references.forEach((ref, index) => {
+                        references += `<br/>${index + 1}. ${ref.law}, ${ref.chapter}, ${ref.title}`;
+                    });
+                    addMessage("ai", references);
+                }
+            })
+            .catch(error => {
+                loading.style.display = "none";
+                console.error("Error:", error);
+                addMessage("ai", "오류가 발생했습니다. 다시 시도하세요.");
+            });
+    }
+
+    // 텍스트 포맷팅 함수
+    function formatText(text) {
+        // **강조** 처리
+        text = text.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+        // 줄바꿈 처리
+        text = text.replace(/\\n/g, "<br>");
+        return text;
+    }
+
+    function addMessage(sender, text) {
+        const messageDiv = document.createElement("div");
+        messageDiv.classList.add("message");
+        messageDiv.innerHTML = `<span class="${sender}">${sender === "user" ? "User" : "AI"}:</span> <p>${text}</p>`;
+        chatBox.appendChild(messageDiv);
+
+        // Scroll to the bottom
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+</script>
+</body>
+</html>⬤

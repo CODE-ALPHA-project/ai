@@ -8,6 +8,7 @@ from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.docstore.in_memory import InMemoryDocstore
 from langchain_core.documents import Document
+from langchain.memory import ConversationBufferMemory
 import os
 
 # .env 파일에서 환경 변수 로드
@@ -16,6 +17,8 @@ project_api_key = os.getenv("OPENAI_API_KEY")
 organization_id = os.getenv("ORGANIZATION_ID")
 project_id = os.getenv("PROJECT_ID")
 langsmith_project = os.getenv("LANGCHAIN_PROJECT")
+
+memory = ConversationBufferMemory()
 
 # OpenAI LLM 설정 (GPT-4o-mini)
 llm = ChatOpenAI(
@@ -54,14 +57,15 @@ def setup_faiss_vectorstore():
     vectorstore = FAISS(
         embedding_function=embeddings,      # 임베딩 생성기
         index=index,                        # 검색 인덱스
-        docstore=docstore,                  # 문서 저장소    
+        docstore=docstore,                  # 문서 저장소
         index_to_docstore_id={i: str(i) for i in range(len(docs))}  # 인덱스와 문서 ID 매핑
     )
     return vectorstore
 
+
 # 질의응답 체인 설정
 def setup_rag_chain(vectorstore):
-    retriever = vectorstore.as_retriever()
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
 
     # 시스템 프롬프트 정의
     system_prompt = (
@@ -72,7 +76,8 @@ def setup_rag_chain(vectorstore):
         "Please mention exactly which 'law' and 'title' you referenced in the retrieved context."
         "If possible, please also provide the number or link of the relevant department."
         "If it seems like you need to consult with a professional labor attorney, "
-        "please add the comment at the end, '전문 노무사와 매칭 서비스를 신청하시겠습니까?'"
+        "Please explain it to me as easily as possible, like a friend."
+        # "please add the comment at the end, '전문 노무사와 매칭 서비스를 신청하시겠습니까?'"
         "\n\n"
         "{context}"
     )
@@ -92,9 +97,22 @@ def setup_rag_chain(vectorstore):
 
     return chain
 
-# 질문 처리 및 답변 생성
 def ask_labor_law_question(rag_chain, question):
-    result = rag_chain.invoke({"input": question})  # 'input'을 사용하여 invoke 호출
+    # 이전 대화 히스토리를 불러옴, 없으면 빈 문자열 사용
+    previous_context = memory.load_memory_variables({"input": question})
+    chat_history = previous_context.get('history', '')  # 'chat_history'가 없으면 빈 문자열 사용
+    print(chat_history)
+    # 이전 대화와 새로운 질문 결합
+    full_input = f"{chat_history}\nuser: {question}\nAI:"
+
+    # RAG 체인을 사용하여 질문에 대한 답변을 생성 (invoke 사용)
+    result = rag_chain.invoke({"input": full_input})
     answer = result.get('answer', '답변을 찾을 수 없습니다.')  # 'answer' 키로 답변 가져오기
-    source_docs = result.get('context', [])  # 참조된 문서 가져오기
+
+    # 새로운 질문과 답변을 메모리에 저장
+    memory.save_context({"input": question}, {"output": answer})
+
+    # 참조된 문서 가져오기
+    source_docs = result.get('source_documents', [])
+
     return answer, source_docs

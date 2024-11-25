@@ -1,3 +1,5 @@
+# uvicorn main:app --reload
+
 import asyncio
 from confluent_kafka import Consumer, KafkaError, Producer
 from concurrent.futures import ThreadPoolExecutor
@@ -93,6 +95,7 @@ async def handle_message(msg):
     producer.flush()
 
     print(f"Sent response to ai-responses: {result_message}")
+
 
 # 이벤트 루프 실행
 @app.on_event("startup")
